@@ -1,43 +1,59 @@
 const mongoose = require('mongoose');
 
-const CandidateSchema = new mongoose.Schema({
-  name: {
-    type: String,
-    required: [true, 'Name is required'],
-    trim: true
-  },
-  email: {
-    type: String,
-    required: [true, 'Email is required'],
-    unique: true,
-    lowercase: true,
-    trim: true,
-    match: [/^\S+@\S+\.\S+$/, 'Please enter a valid email']
-  },
-  skills: {
-    type: [String],
-    required: [true, 'At least one skill is required'],
-    validate: {
-      validator: arr => arr.length > 0,
-      message: 'Skills array cannot be empty'
-    }
-  },
-  experience: {
-    type: Number,
-    required: [true, 'Experience is required'],
-    min: [0, 'Experience cannot be negative']
-  },
-  bio: {
-    type: String,
-    default: '',
-    trim: true
-  },
-  savedToShortlist: {
-    type: Boolean,
-    default: false
-  }
-}, {
-  timestamps: true   // adds createdAt and updatedAt automatically
+const noteSchema = new mongoose.Schema({
+  author:    { type: String },
+  text:      { type: String },
+  createdAt: { type: Date, default: Date.now },
 });
 
-module.exports = mongoose.model('Candidate', CandidateSchema);
+const stageHistorySchema = new mongoose.Schema({
+  stage:     { type: String },
+  enteredAt: { type: Date, default: Date.now },
+  exitedAt:  { type: Date },
+});
+
+const candidateSchema = new mongoose.Schema({
+  companyId:       { type: mongoose.Schema.Types.ObjectId, ref: 'Company', required: true },
+  jobId:           { type: mongoose.Schema.Types.ObjectId, ref: 'Job' },
+  name:            { type: String, required: true, trim: true },
+  email:           { type: String, required: true,
+                     match: [/^[^\s@]+@[^\s@]+\.[^\s@]+$/, 'Invalid email'] },
+  phone:           { type: String, default: '' },
+  experience:      { type: Number, required: true, min: 0 },
+  skills:          [{ type: String }],
+  resumeText:      { type: String, default: '' },
+  resumeUrl:       { type: String, default: '' },
+  linkedinUrl:     { type: String, default: '' },
+  portfolioUrl:    { type: String, default: '' },
+  coverNote:       { type: String, default: '' },
+
+  // AI fields
+  matchScore:      { type: Number, default: null },
+  aiSummary:       { type: String, default: '' },
+  aiFlags:         [{ type: String }],
+  aiStrengths:     [{ type: String }],
+  aiGaps:          [{ type: String }],
+  teamFitScore:    { type: Number, default: null },
+  teamFitReason:   { type: String, default: '' },
+
+  // Pipeline
+  stage: {
+    type: String,
+    enum: ['applied', 'screening', 'interview', 'offer', 'rejected', 'hired'],
+    default: 'applied',
+  },
+  stageHistory:    [stageHistorySchema],
+  savedToShortlist:{ type: Boolean, default: false },
+  ghostRisk:       { type: String, enum: ['low', 'medium', 'high'], default: 'low' },
+  notes:           [noteSchema],
+  source:          { type: String, enum: ['form', 'manual', 'import'], default: 'manual' },
+
+  // Candidate experience tracking (Module 18)
+  followUpCount:   { type: Number, default: 0 },
+  candidateExpScore: { type: Number, default: null },
+}, { timestamps: true });
+
+// Text index for search
+candidateSchema.index({ name: 'text', email: 'text' });
+
+module.exports = mongoose.model('Candidate', candidateSchema);

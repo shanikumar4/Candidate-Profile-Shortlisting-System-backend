@@ -1,40 +1,70 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const connectDB = require('./db');
-const Candidate = require('./models/Candidate');
+const helmet = require('helmet');
+const morgan = require('morgan');
+const rateLimit = require('express-rate-limit');
+const path = require('path');
+const connectDB = require('./config/db');
+const seed = require('./services/seedService');
+const errorHandler = require('./middleware/errorHandler');
 
 const app = express();
 
-// Connect to MongoDB Atlas
-connectDB().then(async () => {
-  const count = await Candidate.countDocuments();
-  if (count === 0) {
-    const seedCandidates = [
-      { name: "Priya Mehta",   email: "priya@example.com",  skills: ["React", "Node.js", "AWS", "TypeScript"], experience: 3, bio: "Senior full-stack engineer with production-scale SaaS experience." },
-      { name: "Rahul Sharma",  email: "rahul@example.com",  skills: ["React", "Node.js", "MongoDB"],           experience: 2, bio: "Built 3 MERN stack apps. Comfortable with REST APIs and state management." },
-      { name: "Ankit Verma",   email: "ankit@example.com",  skills: ["HTML", "CSS", "JavaScript"],             experience: 1, bio: "Frontend developer, primarily builds landing pages and marketing sites." },
-      { name: "Sara Kapoor",   email: "sara@example.com",   skills: ["React", "Redux", "Firebase", "Figma"],   experience: 2, bio: "Frontend-focused engineer with strong UI/UX sensibility and design skills." },
-      { name: "Dev Patel",     email: "dev@example.com",    skills: ["Python", "Django", "PostgreSQL", "Docker"], experience: 4, bio: "Backend-heavy engineer. No JavaScript framework experience." }
-    ];
-    await Candidate.insertMany(seedCandidates);
-    console.log('🌱 Seed data inserted into MongoDB');
-  }
-});
+// ── Security ──
+app.use(helmet());
+app.use(cors({
+  origin: process.env.CLIENT_URL || 'http://localhost:5173',
+  credentials: true,
+}));
 
-// Middleware
-app.use(cors());
-app.use(express.json());
+// ── Rate Limiting ──
+if (process.env.NODE_ENV === 'production') {
+  app.use('/api/', rateLimit({ windowMs: 15 * 60 * 1000, max: 500 }));
+  app.use('/api/auth/login', rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 20,
+    message: { error: 'Too many attempts, try again later' },
+  }));
+}
 
-// Routes
+// ── Logging ──
+if (process.env.NODE_ENV !== 'test') app.use(morgan('dev'));
+
+// ── Body Parsing ──
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// ── Static uploads ──
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// ── Routes ──
+app.use('/api/auth', require('./routes/auth'));
 app.use('/api/candidates', require('./routes/candidates'));
-app.use('/api/match', require('./routes/match'));
-app.use('/api/ai', require('./routes/ai'));
+app.use('/api/jobs', require('./routes/jobs'));
+app.use('/api/analytics', require('./routes/analytics'));
+app.use('/api/bias', require('./routes/bias'));
+app.use('/api/public', require('./routes/public'));
+app.use('/api/company', require('./routes/company'));
 
-// Health check
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', db: 'MongoDB Atlas' });
-});
+// Super Admin Route
+const auth = require('./middleware/auth');
+const role = require('./middleware/role');
+app.use('/api/superadmin', auth, role('superadmin'), require('./routes/superadmin'));
 
+// ── Health ──
+app.get('/api/health', (req, res) => res.json({ status: 'ok', env: process.env.NODE_ENV }));
+
+// ── 404 ──
+app.use((req, res) => res.status(404).json({ error: 'Route not found' }));
+
+// ── Error Handler ──
+app.use(errorHandler);
+
+// ── Start ──
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`🚀 Server running on http://localhost:${PORT}`));
+
+connectDB().then(async () => {
+  await seed();
+  app.listen(PORT, () => console.log(`🚀 HireIQ Server → http://localhost:${PORT}`));
+});
