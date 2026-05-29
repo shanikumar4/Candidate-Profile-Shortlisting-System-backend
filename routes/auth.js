@@ -136,4 +136,41 @@ router.patch('/users/:id', auth, role('admin'), async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// PATCH /api/auth/profile
+router.patch('/profile', auth, async (req, res, next) => {
+  try {
+    const { name, password, currentPassword } = req.body;
+    const user = await User.findById(req.user._id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    if (password) {
+      if (!currentPassword) {
+        return res.status(400).json({ error: 'Current password is required to change password' });
+      }
+      const valid = await user.comparePassword(currentPassword);
+      if (!valid) {
+        return res.status(400).json({ error: 'Incorrect current password' });
+      }
+      user.password = password;
+    }
+
+    if (name) user.name = name.trim();
+
+    await user.save();
+    
+    // Return updated user object
+    res.json({
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        department: user.department,
+        companyId: user.companyId,
+      }
+    });
+  } catch (err) { next(err); }
+});
+
 module.exports = router;
+

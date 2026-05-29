@@ -1,4 +1,5 @@
 require('dotenv').config();
+console.log('=== NODEMON STARTING FRESH 3 ===');
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -68,3 +69,5 @@ connectDB().then(async () => {
   await seed();
   app.listen(PORT, () => console.log(`🚀 HireIQ Server → http://localhost:${PORT}`));
 });
+
+

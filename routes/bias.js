@@ -6,8 +6,8 @@ const auth = require('../middleware/auth');
 const role = require('../middleware/role');
 const { analyzeForBias } = require('../services/aiService');
 
-// POST /api/bias/report  [manager/admin only]
-router.post('/report', auth, role('admin', 'manager'), async (req, res, next) => {
+// POST /api/bias/report  [manager/admin/hr only]
+router.post('/report', auth, role('admin', 'manager', 'hr'), async (req, res, next) => {
   try {
     const { jobId } = req.body;
     if (!jobId) return res.status(400).json({ error: 'jobId required' });

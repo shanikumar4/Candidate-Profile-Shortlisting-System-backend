@@ -37,9 +37,11 @@ router.get('/overview', auth, async (req, res, next) => {
     if (hiredCandidates.length) {
       const times = hiredCandidates.map(c => {
         const hiredEntry = c.stageHistory?.find(s => s.stage === 'hired');
-        return hiredEntry ? Math.round((new Date(hiredEntry.enteredAt) - new Date(c.createdAt)) / (1000 * 60 * 60 * 24)) : 0;
-      });
-      avgTimeToHire = Math.round(times.reduce((a, b) => a + b, 0) / times.length);
+        return hiredEntry ? Math.round((new Date(hiredEntry.enteredAt) - new Date(c.createdAt)) / (1000 * 60 * 60 * 24)) : null;
+      }).filter(t => t !== null);
+      if (times.length > 0) {
+         avgTimeToHire = Math.round(times.reduce((a, b) => a + b, 0) / times.length);
+      }
     }
 
     // Candidate experience scores (Module 18)
@@ -151,14 +153,21 @@ router.get('/time-to-hire', auth, async (req, res, next) => {
       const times = hiredCandidates.map(c => {
         const hiredEntry = c.stageHistory?.find(s => s.stage === 'hired');
         return hiredEntry ? Math.round((new Date(hiredEntry.enteredAt) - new Date(c.createdAt)) / (1000 * 60 * 60 * 24)) : null;
-      }).filter(Boolean);
+      }).filter(t => t !== null);
 
-      if (times.length) {
+      if (times.length > 0) {
         results.push({
           jobId: job._id,
           jobTitle: job.title,
           avgDays: Math.round(times.reduce((a, b) => a + b, 0) / times.length),
-          hiredCount: times.length,
+          hiredCount: hiredCandidates.length,
+        });
+      } else if (hiredCandidates.length > 0) {
+         results.push({
+          jobId: job._id,
+          jobTitle: job.title,
+          avgDays: 0,
+          hiredCount: hiredCandidates.length,
         });
       }
     }

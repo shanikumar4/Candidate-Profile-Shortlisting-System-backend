@@ -158,6 +158,13 @@ router.patch('/:id', auth, async (req, res, next) => {
       if (lastEntry && !lastEntry.exitedAt) lastEntry.exitedAt = now;
       existing.stageHistory.push({ stage: update.stage, enteredAt: now });
 
+      // Automatically sync savedToShortlist flag with the new stage
+      if (['screening', 'interview', 'offer', 'hired'].includes(update.stage)) {
+        update.savedToShortlist = true;
+      } else if (update.stage === 'rejected' || update.stage === 'applied') {
+        update.savedToShortlist = false;
+      }
+
       // Module 18: compute candidate experience score on hired/rejected
       if (update.stage === 'hired' || update.stage === 'rejected') {
         const totalDays = Math.round((now - existing.createdAt) / (1000 * 60 * 60 * 24));
@@ -238,6 +245,7 @@ router.post('/:id/score', auth, async (req, res, next) => {
     if (candidate.stage !== newStage) {
       candidate.stage = newStage;
       candidate.stageHistory.push({ stage: newStage, enteredAt: new Date() });
+      candidate.savedToShortlist = (newStage === 'screening');
     }
     
     await candidate.save();
@@ -285,6 +293,7 @@ router.post('/bulk-score', auth, async (req, res, next) => {
         if (c.stage !== newStage) {
           updateQuery.$set.stage = newStage;
           updateQuery.$push = { stageHistory: { stage: newStage, enteredAt: new Date() } };
+          updateQuery.$set.savedToShortlist = (newStage === 'screening');
         }
 
         await Candidate.findByIdAndUpdate(c._id, updateQuery);
@@ -302,9 +311,16 @@ router.post('/bulk-stage', auth, async (req, res, next) => {
     const { ids, stage } = req.body;
     if (!ids?.length || !stage) return res.status(400).json({ error: 'ids and stage required' });
 
+    const updatePayload = { stage };
+    if (['screening', 'interview', 'offer', 'hired'].includes(stage)) {
+      updatePayload.savedToShortlist = true;
+    } else if (stage === 'rejected' || stage === 'applied') {
+      updatePayload.savedToShortlist = false;
+    }
+
     await Candidate.updateMany(
       { _id: { $in: ids }, companyId: req.user.companyId },
-      { $set: { stage } }
+      { $set: updatePayload }
     );
     res.json({ message: `Updated ${ids.length} candidates to ${stage}` });
   } catch (err) { next(err); }
